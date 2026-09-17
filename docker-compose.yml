@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # 1. API Gateway / BFF (Router central para la app móvil)
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    container_name: cocina-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - WEATHER_SERVICE_URL=http://weather-service:8001
+      - AI_RECIPE_SERVICE_URL=http://ai-recipe-service:8002
+      - RECIPE_SERVICE_URL=http://recipe-service:8003
+    depends_on:
+      - weather-service
+      - ai-recipe-service
+      - recipe-service
+    networks:
+      - cocina-network
+
+  # 2. Microservicio de Clima (Weather Service)
+  weather-service:
+    build:
+      context: ./services/weather-service
+      dockerfile: Dockerfile
+    container_name: cocina-weather-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+    networks:
+      - cocina-network
+
+  # 3. Microservicio de IA Culinaria (AI Recipe Service)
+  ai-recipe-service:
+    build:
+      context: ./services/ai-recipe-service
+      dockerfile: Dockerfile
+    container_name: cocina-ai-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - PORT=8002
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    networks:
+      - cocina-network
+
+  # 4. Microservicio de Recetas y Videos (Recipe Service)
+  recipe-service:
+    build:
+      context: ./services/recipe-service
+      dockerfile: Dockerfile
+    container_name: cocina-recipe-service
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      - PORT=8003
+    networks:
+      - cocina-network
+
+networks:
+  cocina-network:
+    driver: bridge

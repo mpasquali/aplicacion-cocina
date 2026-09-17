@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "¿Qué comemos hoy?",
+    "slug": "que-comemos-hoy-mati",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#FAF7F2"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FAF7F2"
+      }
+    }
+  }
+}
