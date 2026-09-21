@@ -45,3 +45,18 @@ export interface DailyFeedResponse {
   featuredRecipe: MobileRecipe;
   alternativeRecipes: MobileRecipe[];
 }
+
+export interface MobileChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  recipeSuggestion?: MobileRecipe;
+  suggestedReplies?: string[];
+}
+
+export interface MobileChatResponse {
+  reply: string;
+  recipeSuggestion?: MobileRecipe;
+  suggestedReplies?: string[];
+}

@@ -30,28 +30,29 @@ export const WeatherBanner: React.FC<Props> = ({ weather, matiGreeting }) => {
       accessibilityRole="summary"
       accessibilityLabel={`Clima actual: ${temp} grados centígrados, ${weather.condition}. Mensaje de Mati: ${matiGreeting || defaultGreeting}`}
     >
-      {/* Cabecera del Clima */}
-      <View style={styles.topRow}>
-        <View style={styles.tempGroup}>
-          <Text style={styles.weatherIcon}>{weatherIcon}</Text>
-          <View>
+      {/* Encabezado del Clima */}
+      <View style={styles.weatherHeader}>
+        <Text style={styles.weatherIcon}>{weatherIcon}</Text>
+        <View style={styles.tempInfoContainer}>
+          <View style={styles.tempBadgeRow}>
             <Text style={styles.tempNumber}>{temp}°C</Text>
-            <Text style={styles.conditionText}>{weather.condition} • {weather.city}</Text>
+            <View style={[styles.badge, { backgroundColor: tagBackground }]}>
+              <Text style={[styles.badgeText, { color: tagColor }]} numberOfLines={1}>
+                {weather.culinaryProfile?.sensationText || (isCold ? '¡Día de Olla!' : isHot ? '¡Día Fresco!' : '¡Día Templado!')}
+              </Text>
+            </View>
           </View>
-        </View>
-
-        <View style={[styles.badge, { backgroundColor: tagBackground }]}>
-          <Text style={[styles.badgeText, { color: tagColor }]}>
-            {weather.culinaryProfile?.sensationText || (isCold ? '¡Día de Olla!' : isHot ? '¡Día Fresco!' : '¡Día Templado!')}
+          <Text style={styles.conditionText} numberOfLines={1} ellipsizeMode="tail">
+            {weather.condition}
           </Text>
         </View>
       </View>
 
-      {/* Saludo empático y cercano de Mati */}
-      <View style={styles.greetingBox}>
-        <View style={styles.avatarMini}>
-          <Text style={styles.avatarEmoji}>👨‍🍳</Text>
-        </View>
+      {/* Línea divisoria muy fina y sutil */}
+      <View style={styles.divider} />
+
+      {/* Mensaje de Mati integrado de forma fluida, sin borde interior ni caja separada */}
+      <View style={styles.messageContainer}>
         <Text style={styles.greetingText}>
           {matiGreeting || defaultGreeting}
         </Text>
@@ -63,78 +64,71 @@ export const WeatherBanner: React.FC<Props> = ({ weather, matiGreeting }) => {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: THEME.colors.cardBackground,
-    borderRadius: THEME.accessibility.borderRadiusCard,
-    padding: THEME.spacing.md,
-    marginVertical: THEME.spacing.sm,
-    borderWidth: 1.5,
+    borderRadius: 20,
+    padding: 20,
+    borderWidth: 1,
     borderColor: THEME.colors.border,
     shadowColor: THEME.colors.shadow,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: THEME.spacing.sm,
-  },
-  tempGroup: {
+  weatherHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 8,
   },
   weatherIcon: {
     fontSize: 34,
-    marginRight: 10,
+    marginRight: 12,
+  },
+  tempInfoContainer: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  tempBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   tempNumber: {
-    fontSize: THEME.typography.sizes.hero,
+    fontSize: 28,
     fontWeight: '800',
     color: THEME.colors.textPrimary,
-  },
-  conditionText: {
-    fontSize: THEME.typography.sizes.caption,
-    color: THEME.colors.textSecondary,
-    fontWeight: '600',
+    lineHeight: 32,
+    marginRight: 10,
   },
   badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 2,
   },
   badgeText: {
-    fontWeight: '800',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  conditionText: {
     fontSize: 13,
-  },
-  greetingBox: {
-    flexDirection: 'row',
-    backgroundColor: THEME.colors.cardHighlight,
-    borderRadius: 16,
-    padding: THEME.spacing.sm + 2,
-    alignItems: 'flex-start',
-    borderLeftWidth: 4,
-    borderLeftColor: THEME.colors.primary,
-  },
-  avatarMini: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#FFE8D6',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 10,
+    color: THEME.colors.textSecondary,
+    fontWeight: '500',
     marginTop: 2,
   },
-  avatarEmoji: {
-    fontSize: 18,
+  divider: {
+    height: 1,
+    backgroundColor: '#F0ECE4',
+    marginVertical: 12,
+  },
+  messageContainer: {
+    paddingTop: 2,
   },
   greetingText: {
-    flex: 1,
-    fontSize: THEME.typography.sizes.body,
-    lineHeight: THEME.typography.lineHeights.body,
+    fontSize: 15,
+    lineHeight: 22,
     color: THEME.colors.textPrimary,
-    fontStyle: 'italic',
-    fontWeight: '500',
+    fontWeight: '400',
   }
 });

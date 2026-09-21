@@ -135,6 +135,35 @@ app.get('/api/v1/recipes/:id', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Proxy al Asistente Culinario con IA ("Mati Bot")
+ * POST /api/v1/chat
+ * Body: { messages: [{ role: 'user' | 'assistant', content: string }], context?: { temperature?: number, condition?: string, city?: string } }
+ */
+app.post('/api/v1/chat', async (req: Request, res: Response) => {
+  try {
+    const { messages, context } = req.body;
+
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: 'El campo "messages" es requerido y debe ser un arreglo.' });
+    }
+
+    const response = await axios.post(
+      `${AI_RECIPE_SERVICE_URL}/ai/chat`,
+      { messages, context },
+      { timeout: 10000 }
+    );
+
+    return res.json(response.data);
+  } catch (error) {
+    console.error('Error en API Gateway /api/v1/chat:', (error as Error).message);
+    return res.status(502).json({
+      error: 'Inconveniente comunicando con el Asistente Mati Bot',
+      detail: (error as Error).message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🌐 API Gateway activo en el puerto ${PORT}`);
 });

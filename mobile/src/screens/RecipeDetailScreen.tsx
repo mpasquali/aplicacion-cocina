@@ -392,19 +392,22 @@ const styles = StyleSheet.create({
   ingredientTexts: {
     flex: 1,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
+    columnGap: 8,
+    rowGap: 2,
   },
   ingredientAmount: {
     fontSize: THEME.typography.sizes.bodyLarge,
     fontWeight: '800',
     color: THEME.colors.textPrimary,
-    marginRight: 8,
+    flexShrink: 1,
   },
   ingredientName: {
     fontSize: THEME.typography.sizes.bodyLarge,
     color: THEME.colors.textPrimary,
     fontWeight: '500',
-    flex: 1,
+    flexShrink: 1,
   },
   ingredientTextChecked: {
     textDecorationLine: 'line-through',

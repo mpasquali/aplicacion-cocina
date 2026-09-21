@@ -38,3 +38,23 @@ export interface AIRecipeRecommendationResponse {
   featuredRecipe: AIRecipeOption;
   alternativeRecipes: AIRecipeOption[];
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface AIChatRequest {
+  messages: ChatMessage[];
+  context?: {
+    temperature?: number;
+    condition?: string;
+    city?: string;
+  };
+}
+
+export interface AIChatResponse {
+  reply: string;
+  recipeSuggestion?: AIRecipeOption;
+  suggestedReplies?: string[];
+}

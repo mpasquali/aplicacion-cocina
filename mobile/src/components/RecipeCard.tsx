@@ -78,17 +78,22 @@ export const RecipeCard: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   card: {
+    width: '100%',
+    alignSelf: 'stretch',
     backgroundColor: THEME.colors.cardBackground,
     borderRadius: THEME.accessibility.borderRadiusCard,
     padding: THEME.spacing.md,
-    marginVertical: THEME.spacing.sm,
+    marginTop: 0,
+    marginBottom: 16,
+    marginLeft: 0,
+    marginRight: 0,
     borderWidth: 1.5,
     borderColor: THEME.colors.border,
     shadowColor: THEME.colors.shadow,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
     shadowRadius: 6,
-    elevation: 3,
+    elevation: 2,
   },
   featuredCard: {
     borderColor: THEME.colors.primary,

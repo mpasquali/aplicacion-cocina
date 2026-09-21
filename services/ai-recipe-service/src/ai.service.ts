@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
-import { MATI_SYSTEM_PROMPT } from './matiPrompt';
-import { AIRecipeRecommendationResponse } from './types';
+import { MATI_SYSTEM_PROMPT, MATI_CHAT_SYSTEM_PROMPT } from './matiPrompt';
+import { AIRecipeRecommendationResponse, AIChatRequest, AIChatResponse } from './types';
 
 export interface RecommendParams {
   temperature: number;
@@ -357,5 +357,328 @@ Por favor, como Mati de "Mati entre ollas", recomendame qué cocinar hoy adaptá
         ]
       };
     }
+  }
+
+  /**
+   * Interacción conversacional en tiempo real con Mati Bot
+   */
+  public async chatWithMati(params: AIChatRequest): Promise<AIChatResponse> {
+    const { messages, context } = params;
+    const contextInfo = context
+      ? `Contexto actual: Ciudad: ${context.city || 'Buenos Aires'}, Temperatura: ${context.temperature ?? 15}°C, Condición: ${context.condition || 'Templado'}.`
+      : '';
+
+    const lastUserMessage = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+
+    // 1. Intento con Google Gemini
+    if (this.geminiClient) {
+      try {
+        const model = this.geminiClient.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.7,
+          },
+          systemInstruction: `${MATI_CHAT_SYSTEM_PROMPT}\n${contextInfo}`,
+        });
+
+        const chatHistoryText = messages
+          .map(m => `${m.role === 'user' ? 'Usuario' : 'Mati'}: ${m.content}`)
+          .join('\n');
+
+        const prompt = `Historial de la conversación:\n${chatHistoryText}\n\nResponde como Mati al último mensaje del usuario en formato JSON estricto:`;
+        const result = await model.generateContent(prompt);
+        const text = result.response.text();
+        return JSON.parse(text) as AIChatResponse;
+      } catch (err) {
+        console.warn('⚠️ Error al consultar Gemini API en chat, intentando siguiente vía:', (err as Error).message);
+      }
+    }
+
+    // 2. Intento con OpenAI
+    if (this.openaiClient) {
+      try {
+        const completion = await this.openaiClient.chat.completions.create({
+          model: 'gpt-4o-mini',
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: `${MATI_CHAT_SYSTEM_PROMPT}\n${contextInfo}` },
+            ...messages.map(m => ({
+              role: (m.role === 'assistant' ? 'assistant' : 'user') as 'assistant' | 'user',
+              content: m.content
+            }))
+          ],
+          temperature: 0.7,
+        });
+
+        const content = completion.choices[0]?.message?.content;
+        if (content) {
+          return JSON.parse(content) as AIChatResponse;
+        }
+      } catch (err) {
+        console.warn('⚠️ Error al consultar OpenAI API en chat:', (err as Error).message);
+      }
+    }
+
+    // 3. Fallback inteligente y empático de Mati
+    return this.generateSmartChatFallback(lastUserMessage, context?.temperature);
+  }
+
+  /**
+   * Generador de respuestas heurísticas inteligentes para el chat con el tono característico de Mati
+   */
+  private generateSmartChatFallback(userText: string, temperature?: number): AIChatResponse {
+    const text = userText.toLowerCase();
+
+    // Detección: Papas, huevos, tortilla
+    if (text.includes('papa') || text.includes('huevo') || text.includes('tortilla')) {
+      return {
+        reply: '¡Qué hacés che! Mirá, teniendo papas y huevos ya tenés la gloria servida en bandeja. Te armás una tortilla babé bien jugosa, con ese toque casero que te reconforta al toque. ¡Mirá el paso a paso que te armé acá abajo!',
+        recipeSuggestion: {
+          id: 'tortilla-papas-mati',
+          title: 'Tortilla de Papas y Cebolla Babé',
+          badge: '¡El clásico argentino por excelencia!',
+          description: 'Doradita por fuera, tierna y jugosa por dentro. Cero vueltas.',
+          prepTimeMinutes: 25,
+          difficulty: 'Fácil',
+          estimatedCost: 'Económico',
+          servings: '2 a 3 porciones',
+          ingredients: [
+            { name: 'Papas medianas', amount: '3 cortadas en rodajas finitas' },
+            { name: 'Huevos de campo', amount: '4 o 5 unidades' },
+            { name: 'Cebolla', amount: '1 grande en juliana (opcional pero suma)' },
+            { name: 'Aceite y sal', amount: 'Cantidad necesaria' }
+          ],
+          steps: [
+            {
+              stepNumber: 1,
+              title: 'Cocer papas y cebollas',
+              instruction: 'En una sartén con abundante aceite caliente, cociná las papas y la cebolla a fuego medio hasta que estén tiernas y apenas doradas. Escurrilas bien.'
+            },
+            {
+              stepNumber: 2,
+              title: 'El remojo sagrado',
+              instruction: 'Batí los huevos con una pizca de sal. Volcá las papas tibias y dejalas descansar 5 minutos para que la papa absorba el huevo.'
+            },
+            {
+              stepNumber: 3,
+              title: 'Sartén bien caliente',
+              instruction: 'En sartén con una gota de aceite humeante, volcá todo. Cociná 2-3 minutos a fuego fuerte, dala vuelta con plato playo y dale 1 minuto más si te gusta babé.'
+            }
+          ],
+          matiSecretTip: 'Dejá reposar las papas tibias en el huevo batido unos minutos antes de mandar todo al fuego. La papa chupa el huevo y queda cremosa como un flan.',
+          videoUrl: 'https://www.instagram.com/matientreollas',
+          videoPlatform: 'instagram'
+        },
+        suggestedReplies: [
+          '¿Cómo hago para darla vuelta sin que se desarme?',
+          'No tengo cebolla, ¿sale rica igual?',
+          'Pasame otra idea con papas'
+        ]
+      };
+    }
+
+    // Detección: Pastas, fideos, salsa, tuco
+    if (text.includes('fideo') || text.includes('pasta') || text.includes('tuco') || text.includes('salsa')) {
+      return {
+        reply: '¡Upa, qué manjar una buena pasta casera! El olorcito a salsa perfumando la cocina no tiene comparación. Te preparé una salsita express bien sabrosa para acompañar cualquier fideo que tengas a mano:',
+        recipeSuggestion: {
+          id: 'pastas-tuco-express',
+          title: 'Fideos Caseros al Tuco Rápido y Queso',
+          badge: '¡Abrazo de domingo en 20 min!',
+          description: 'Salsa suave con tomate, laurel y lluvia de queso rallado.',
+          prepTimeMinutes: 20,
+          difficulty: 'Súper fácil',
+          estimatedCost: 'Económico',
+          servings: '2 a 3 porciones',
+          ingredients: [
+            { name: 'Fideos (tallarines, moñitos o tirabuzón)', amount: '350g' },
+            { name: 'Puré de tomate o lata perita', amount: '1 cajita (500g)' },
+            { name: 'Cebolla y diente de ajo', amount: '1 de cada uno picaditos' },
+            { name: 'Queso rallado', amount: 'A gusto y piaccere' }
+          ],
+          steps: [
+            {
+              stepNumber: 1,
+              title: 'Dorar la base aromática',
+              instruction: 'Rehogá la cebolla y el ajo picados en una cacerolita con oliva hasta que estén transparentes.'
+            },
+            {
+              stepNumber: 2,
+              title: 'Cocinar el tuco',
+              instruction: 'Sumá el tomate, una pizca de azúcar y una de sal. Dejalo espesar 15 minutos a fuego bajito.'
+            },
+            {
+              stepNumber: 3,
+              title: 'Juntar todo en la cacerola',
+              instruction: 'Herví los fideos al dente, colalos guardando un chorrito de agua de cocción, y mezclalos directo adentro de la salsa.'
+            }
+          ],
+          matiSecretTip: 'Nunca le tires la salsa arriba de los fideos secos en el plato. Tirale los fideos al dente directo adentro de la cacerola con la salsa hirviendo y un chorrito de agua de cocción. El almidón une todo.',
+          videoUrl: 'https://www.tiktok.com/@matientreollas',
+          videoPlatform: 'tiktok'
+        },
+        suggestedReplies: [
+          '¿Cómo sé cuándo están al dente?',
+          '¿Qué hierbas le puedo sumar a la salsa?',
+          'Quiero algo sin salsa de tomate'
+        ]
+      };
+    }
+
+    // Detección: Pollo, carne, arroz
+    if (text.includes('pollo') || text.includes('carne') || text.includes('arroz')) {
+      return {
+        reply: '¡Che, qué platazo salvador! El arroz con pollo o carne bien sazonado te resuelve el almuerzo o la cena con una sola olla sucia. Mirá lo fácil y rendidor que es:',
+        recipeSuggestion: {
+          id: 'arroz-pollo-olla',
+          title: 'Arroz Cremoso con Pollo al Verdeo',
+          badge: '¡Rendidor y en una sola olla!',
+          description: 'Cremoso, dorado y con mucho perfume casero.',
+          prepTimeMinutes: 30,
+          difficulty: 'Fácil',
+          estimatedCost: 'Medio',
+          servings: '3 porciones',
+          ingredients: [
+            { name: 'Pechuga o muslo de pollo deshuesado', amount: '400g en cubos' },
+            { name: 'Arroz largo fino o doble carolina', amount: '1 taza' },
+            { name: 'Cebolla de verdeo', amount: '2 tallos picados' },
+            { name: 'Caldo de verduras caliente', amount: '2 tazas y media' }
+          ],
+          steps: [
+            {
+              stepNumber: 1,
+              title: 'Dorar el pollo',
+              instruction: 'En una olla caliente con aceite, dorá los cubos de pollo hasta que tomen buen colorcito. Retirá y reservá.'
+            },
+            {
+              stepNumber: 2,
+              title: 'Nacarar el arroz',
+              instruction: 'En la misma olla con el juguito, rehogá el verdeo y sumá el arroz 1 minuto hasta que se ponga translúcido.'
+            },
+            {
+              stepNumber: 3,
+              title: 'Cocción suave',
+              instruction: 'Reincorporá el pollo, volcá el caldo hirviendo, tapá y cociná a fuego mínimo 15 minutos sin revolver.'
+            }
+          ],
+          matiSecretTip: 'Una cucharada de queso crema o manteca fría al apagar el fuego le da una cremosidad estilo risotto que te va a enamorar.',
+          videoUrl: 'https://www.instagram.com/matientreollas',
+          videoPlatform: 'instagram'
+        },
+        suggestedReplies: [
+          '¿Se puede hacer con arroz integral?',
+          'No tengo verdeo, ¿pongo cebolla común?',
+          'Quiero una opción vegetariana'
+        ]
+      };
+    }
+
+    // Detección: Frío, guiso, olla, sopa
+    if (text.includes('frio') || text.includes('frío') || text.includes('guiso') || text.includes('lenteja') || text.includes('sopa') || (temperature !== undefined && temperature <= 15)) {
+      return {
+        reply: '¡Che, con este fresquete no hay nada como poner la pava para unos mates y mandarse un platazo de olla que te abrigue hasta el corazón! Mirá lo que tengo pensado para vos:',
+        recipeSuggestion: {
+          id: 'guiso-lentejas-chat',
+          title: 'Guisito Criollo de Lentejas y Verduras',
+          badge: '¡El rey del invierno!',
+          description: 'Espeso, lleno de sabor y reconfortante. El abrazo de mamá en un plato.',
+          prepTimeMinutes: 40,
+          difficulty: 'Fácil',
+          estimatedCost: 'Económico',
+          servings: '4 platos generosos',
+          ingredients: [
+            { name: 'Lentejas (secas o 2 latas)', amount: '400g' },
+            { name: 'Papas medianas', amount: '2 cortadas en cubos' },
+            { name: 'Cebolla y morrón', amount: '1 de cada uno picaditos' },
+            { name: 'Puré de tomate', amount: '500g' }
+          ],
+          steps: [
+            {
+              stepNumber: 1,
+              title: 'El sofrito',
+              instruction: 'Rehogá cebolla y morrón en una olla amplia con un chorrito de aceite hasta que estén tiernos.'
+            },
+            {
+              stepNumber: 2,
+              title: 'Adentro todo',
+              instruction: 'Agregá papas en cubitos, puré de tomate, lentejas y 3 tazas de agua caliente.'
+            },
+            {
+              stepNumber: 3,
+              title: 'Fuego lento',
+              instruction: 'Tapá y dejá que cocine 35 minutos hasta que la papa esté manteca y el caldo espeso.'
+            }
+          ],
+          matiSecretTip: 'Apagá el fuego y tirale una cucharadita de orégano y un toque de oliva crudo antes de servir. Dejalo reposar 5 minutos tapado. Es la gloria.',
+          videoUrl: 'https://www.instagram.com/matientreollas',
+          videoPlatform: 'instagram'
+        },
+        suggestedReplies: [
+          '¿Lleva carne o se puede hacer veggie?',
+          '¿Puedo usar lentejas de lata?',
+          'Dame otra opción para el frío'
+        ]
+      };
+    }
+
+    // Detección: Rápido, poco tiempo, fácil
+    if (text.includes('rapido') || text.includes('rápido') || text.includes('15') || text.includes('apurad') || text.includes('facil') || text.includes('fácil')) {
+      return {
+        reply: '¡Tranqui che, acá cero complicaciones! Si estás con poco tiempo y la panza te hace ruido, en 15 minutos de reloj te armás esta delicia sin ensuciar casi nada:',
+        recipeSuggestion: {
+          id: 'polenta-cremosa-express',
+          title: 'Polenta Cremosa con Queso Derretido',
+          badge: '¡Listo en 15 minutos!',
+          description: 'Cremosa, humeante y con lluvia de queso en el fondo.',
+          prepTimeMinutes: 15,
+          difficulty: 'Súper fácil',
+          estimatedCost: 'Económico',
+          servings: '2 porciones',
+          ingredients: [
+            { name: 'Polenta mágica (cocción 1 min)', amount: '1 taza' },
+            { name: 'Leche o caldo caliente', amount: '3 tazas' },
+            { name: 'Queso cremoso o muzarella', amount: '150g en cubos' },
+            { name: 'Manteca', amount: '1 cucharada generosa' }
+          ],
+          steps: [
+            {
+              stepNumber: 1,
+              title: 'Hervir el líquido',
+              instruction: 'Poné a hervir la leche o caldo con sal y la manteca en una cacerolita.'
+            },
+            {
+              stepNumber: 2,
+              title: 'Lluvia mágica',
+              instruction: 'Volcá la polenta en forma de lluvia batiendo con fuerza 1 minuto para que no queden grumos.'
+            },
+            {
+              stepNumber: 3,
+              title: 'Servir con queso',
+              instruction: 'Poné cubos de queso en el fondo del plato y tirá la polenta hirviendo por encima.'
+            }
+          ],
+          matiSecretTip: 'Cubos gigantes de queso en el fondo del plato hondo antes de servir. Al primer tenedor tenés hilos de queso infinitos.',
+          videoUrl: 'https://www.tiktok.com/@matientreollas',
+          videoPlatform: 'tiktok'
+        },
+        suggestedReplies: [
+          '¿Qué salsa rápida le queda bien?',
+          '¿Cómo hago para que no queden grumos?',
+          'Quiero otra receta de 15 minutos'
+        ]
+      };
+    }
+
+    // Saludo / Consulta general por defecto
+    return {
+      reply: '¡Buenas che! Acá Mati entre ollas al pie del cañón. ¿Qué hay por esa cocina hoy? Contame qué ingredientes tenés a mano en la heladera o alacena (aunque sean dos pavadas) y te armamos una comida casera bien rica, sin vueltas y al toque.',
+      suggestedReplies: [
+        'Tengo papas y huevos en la heladera',
+        'Quiero algo rápido en 15 minutos',
+        'Tengo fideos y quiero una salsa rica',
+        '¿Qué puedo hacer hoy con frío?'
+      ]
+    };
   }
 }

@@ -7,63 +7,82 @@ import {
   ActivityIndicator,
   SafeAreaView,
   StatusBar,
-  TouchableOpacity
+  TouchableOpacity,
+  Image,
 } from 'react-native';
 import { THEME } from '../theme/colors';
 import { DailyFeedResponse, MobileRecipe, WeatherInfo } from '../types/recipe';
 import { WeatherBanner } from '../components/WeatherBanner';
 import { RecipeCard } from '../components/RecipeCard';
 import { BigAccessibleButton } from '../components/BigAccessibleButton';
+import { API_BASE_URL, API_ENDPOINTS } from '../config/api';
+import { fetchRealWeather } from '../services/weatherService';
 
 interface Props {
   onSelectRecipe: (recipe: MobileRecipe) => void;
+  onOpenChat?: (weather?: WeatherInfo) => void;
   apiBaseUrl?: string;
 }
 
 export const HomeScreen: React.FC<Props> = ({
   onSelectRecipe,
-  apiBaseUrl = 'http://localhost:8000'
+  onOpenChat,
+  apiBaseUrl = API_BASE_URL
 }) => {
   const [loading, setLoading] = useState<boolean>(true);
-  const [simulatedTemp, setSimulatedTemp] = useState<number>(12); // Clima invernal por defecto
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const [currentWeather, setCurrentWeather] = useState<WeatherInfo | null>(null);
+  const [isGps, setIsGps] = useState<boolean>(false);
   const [feed, setFeed] = useState<DailyFeedResponse | null>(null);
 
-  const fetchDailyFeed = async (tempOverride?: number) => {
+  const loadRealWeatherAndFeed = async () => {
     setLoading(true);
-    const tempToUse = tempOverride !== undefined ? tempOverride : simulatedTemp;
-
     try {
-      // Llamada al API Gateway / BFF
-      const url = `${apiBaseUrl}/api/v1/daily-recommendation?city=Buenos%20Aires&temp=${tempToUse}`;
-      const res = await fetch(url);
-      const data = await res.json();
+      // 1. Obtener coordenadas, localidad y temperatura real con Open-Meteo y expo-location
+      const { weather, coords, isRealGps } = await fetchRealWeather();
+      setCurrentWeather(weather);
+      setIsGps(isRealGps);
 
-      if (data.recommendation) {
-        setFeed({
-          weather: data.weather,
-          matiGreeting: data.recommendation.matiGreeting,
-          featuredRecipe: data.recommendation.featuredRecipe,
-          alternativeRecipes: data.recommendation.alternativeRecipes || []
+      // 2. Intentar consultar API Gateway BFF con la temperatura y ubicación real
+      try {
+        const queryParams = new URLSearchParams({
+          city: weather.city,
+          temp: weather.temperature.toString(),
+          lat: coords.latitude.toString(),
+          lon: coords.longitude.toString(),
         });
-      } else {
-        // Fallback local en caso de desconexión momentánea de red
-        setFeed(getOfflineFallback(tempToUse));
+        const url = `${apiBaseUrl}${API_ENDPOINTS.DAILY_RECOMMENDATION}?${queryParams.toString()}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.recommendation) {
+            setFeed({
+              weather: data.weather || weather,
+              matiGreeting: data.recommendation.matiGreeting,
+              featuredRecipe: data.recommendation.featuredRecipe,
+              alternativeRecipes: data.recommendation.alternativeRecipes || []
+            });
+            return;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('API Gateway no accesible, activando modo sin conexión de Mati:', apiErr);
       }
+
+      // 3. Fallback inteligente adaptado a la temperatura real
+      setFeed(getOfflineFallback(weather));
     } catch (err) {
-      console.warn('API Gateway no accesible, activando modo sin conexión de Mati:', err);
-      setFeed(getOfflineFallback(tempToUse));
+      console.error('Error cargando clima y feed:', err);
+      setFeed(getOfflineFallback(18));
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    fetchDailyFeed(simulatedTemp);
-  }, [simulatedTemp]);
-
-  const handleTempChange = (temp: number) => {
-    setSimulatedTemp(temp);
-  };
+    loadRealWeatherAndFeed();
+  }, []);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -73,50 +92,46 @@ export const HomeScreen: React.FC<Props> = ({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera Cálida y Humana */}
+        {/* Cabecera Minimalista y Cálida */}
         <View style={styles.header}>
-          <View style={styles.headerTop}>
-            <View style={styles.brandBadge}>
-              <Text style={styles.brandBadgeText}>🍲 MATI ENTRE OLLAS</Text>
-            </View>
+          <View style={styles.logoCenterContainer}>
+            <Image
+              source={require('../../assets/images/sello-mati.png')}
+              style={styles.brandSeal}
+              resizeMode="contain"
+              accessible={true}
+              accessibilityRole="image"
+              accessibilityLabel="Logo circular de Mati entre ollas"
+            />
           </View>
-          <Text style={styles.mainTitle}>¿Qué comemos hoy?</Text>
-          <Text style={styles.subtitle}>
-            Comida casera, sin vueltas y para chuparse los dedos.
-          </Text>
+          <View style={styles.titleContainer}>
+            <Text style={styles.mainTitle}>¿Qué comemos hoy?</Text>
+            <Text style={styles.subtitle}>
+              Comida casera, sin vueltas y para chuparse los dedos.
+            </Text>
+          </View>
         </View>
 
-        {/* Selector Accesible de Clima (Ideal para probar cómo la IA adapta los platos) */}
-        <View style={styles.tempSelectorSection}>
-          <Text style={styles.sectionMiniTitle}>PROBÁ CÓMO CAMBIA SEGÚN EL CLIMA:</Text>
-          <View style={styles.tempButtonsRow}>
-            <TouchableOpacity
-              onPress={() => handleTempChange(8)}
-              style={[styles.tempChip, simulatedTemp <= 14 && styles.tempChipActive]}
-              accessibilityRole="button"
-              accessibilityLabel="Simular día frío de 8 grados para platos de olla"
-            >
-              <Text style={styles.tempChipText}>❄️ Frío (8°C)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleTempChange(19)}
-              style={[styles.tempChip, simulatedTemp > 14 && simulatedTemp < 25 && styles.tempChipActive]}
-              accessibilityRole="button"
-              accessibilityLabel="Simular día templado de 19 grados para tartas o pastas"
-            >
-              <Text style={styles.tempChipText}>🌤️ Templado (19°C)</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => handleTempChange(32)}
-              style={[styles.tempChip, simulatedTemp >= 25 && styles.tempChipActive]}
-              accessibilityRole="button"
-              accessibilityLabel="Simular día caluroso de 32 grados para platos frescos"
-            >
-              <Text style={styles.tempChipText}>☀️ Calor (32°C)</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Ubicación en contenedor flotante ligero tipo píldora */}
+        <View style={styles.locationPillContainer}>
+          <Text style={styles.locationText} numberOfLines={1}>
+            📍 {currentWeather?.city || 'Detectando ubicación...'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              setRefreshing(true);
+              loadRealWeatherAndFeed();
+            }}
+            disabled={loading || refreshing}
+            style={styles.refreshIconButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            activeOpacity={0.7}
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel="Actualizar clima y ubicación actual"
+          >
+            <Text style={styles.refreshIconText}>{refreshing ? '⏳' : '🔄'}</Text>
+          </TouchableOpacity>
         </View>
 
         {loading ? (
@@ -128,11 +143,13 @@ export const HomeScreen: React.FC<Props> = ({
           </View>
         ) : feed ? (
           <>
-            {/* Banner de Clima y Saludo Empático */}
-            <WeatherBanner
-              weather={feed.weather}
-              matiGreeting={feed.matiGreeting}
-            />
+            {/* Banner de Clima y Saludo Empático Unificado */}
+            <View style={styles.weatherBannerContainer}>
+              <WeatherBanner
+                weather={feed.weather}
+                matiGreeting={feed.matiGreeting}
+              />
+            </View>
 
             {/* Plato Destacado del Día */}
             <View style={styles.sectionHeader}>
@@ -148,8 +165,8 @@ export const HomeScreen: React.FC<Props> = ({
 
             {/* Opciones Alternativas */}
             {feed.alternativeRecipes.length > 0 && (
-              <>
-                <View style={[styles.sectionHeader, { marginTop: THEME.spacing.lg }]}>
+              <View style={styles.alternativeSection}>
+                <View style={styles.alternativeSectionHeader}>
                   <Text style={styles.sectionTitle}>¿No te convence? Mirá esta otra opción:</Text>
                   <Text style={styles.sectionHint}>Rápida, económica y con la misma onda</Text>
                 </View>
@@ -162,18 +179,18 @@ export const HomeScreen: React.FC<Props> = ({
                     onPress={() => onSelectRecipe(alt)}
                   />
                 ))}
-              </>
+              </View>
             )}
 
-            {/* Botón de refresco accesible */}
+            {/* Botón interactivo para abrir Chat con Mati Bot */}
             <View style={styles.refreshBox}>
               <BigAccessibleButton
                 title="Pedir otra sugerencia a la IA"
-                subtitle="Mati te busca otra idea al instante"
-                icon="💡"
+                subtitle="Charlá con Mati Bot para que te ayude"
+                icon="👨‍🍳"
                 variant="outline"
-                onPress={() => fetchDailyFeed()}
-                accessibilityLabel="Pedir otra recomendación de comida a la inteligencia artificial de Mati"
+                onPress={() => (onOpenChat ? onOpenChat(feed?.weather) : loadRealWeatherAndFeed())}
+                accessibilityLabel="Abrir chat con el asistente de cocina Mati Bot"
               />
             </View>
           </>
@@ -183,21 +200,36 @@ export const HomeScreen: React.FC<Props> = ({
   );
 };
 
-// Respaldo sin conexión para visualización garantizada
-function getOfflineFallback(temp: number): DailyFeedResponse {
+// Respaldo sin conexión adaptado dinámicamente al clima y localidad real
+function getOfflineFallback(weatherOrTemp: WeatherInfo | number): DailyFeedResponse {
+  const temp = typeof weatherOrTemp === 'number' ? weatherOrTemp : weatherOrTemp.temperature;
+  const city = typeof weatherOrTemp === 'number' ? 'Buenos Aires' : weatherOrTemp.city;
+  const condition = typeof weatherOrTemp === 'number'
+    ? (temp <= 14 ? 'Nublado con frío' : temp >= 25 ? 'Caluroso y soleado' : 'Agradable y templado')
+    : weatherOrTemp.condition;
+  const culinaryProfile = typeof weatherOrTemp === 'number'
+    ? (temp <= 14
+        ? { category: 'frio' as const, sensationText: '¡Día de guiso y frazada!', suggestedDishType: 'Platos de olla y cuchara' }
+        : temp >= 25
+        ? { category: 'calor' as const, sensationText: '¡Mucho calor para prender el horno!', suggestedDishType: 'Plato fresco y rápido' }
+        : { category: 'templado' as const, sensationText: 'Clima ideal', suggestedDishType: 'Clásicos caseros' })
+    : (weatherOrTemp.culinaryProfile || {
+        category: (temp <= 14 ? 'frio' : temp >= 25 ? 'calor' : 'templado') as 'frio' | 'calor' | 'templado',
+        sensationText: temp <= 14 ? '¡Día de guiso y frazada!' : temp >= 25 ? '¡Mucho calor para prender el horno!' : 'Clima ideal',
+        suggestedDishType: temp <= 14 ? 'Platos de olla y cuchara' : temp >= 25 ? 'Plato fresco y rápido' : 'Clásicos caseros'
+      });
+
+  const weatherObj: WeatherInfo = {
+    city,
+    temperature: temp,
+    condition,
+    culinaryProfile,
+  };
+
   if (temp <= 14) {
     return {
-      weather: {
-        city: 'Buenos Aires',
-        temperature: temp,
-        condition: 'Nublado con frío',
-        culinaryProfile: {
-          category: 'frio',
-          sensationText: '¡Día de guiso y frazada!',
-          suggestedDishType: 'Platos de olla y cuchara'
-        }
-      },
-      matiGreeting: `¡Che, qué fresquete con estos ${temp}°C! Hoy sale o sale un guisito bien cargado para levantar el ánimo y abrigar el cuerpo.`,
+      weather: weatherObj,
+      matiGreeting: `¡Che, qué fresquete con estos ${temp}°C en ${city}! Hoy sale o sale un guisito bien cargado para levantar el ánimo y abrigar el cuerpo.`,
       featuredRecipe: {
         id: 'guiso-lentejas-demo',
         title: 'Guiso Criollo de Lentejas Reconfortante',
@@ -258,17 +290,8 @@ function getOfflineFallback(temp: number): DailyFeedResponse {
     };
   } else if (temp >= 25) {
     return {
-      weather: {
-        city: 'Buenos Aires',
-        temperature: temp,
-        condition: 'Caluroso y soleado',
-        culinaryProfile: {
-          category: 'calor',
-          sensationText: '¡Mucho calor para prender el horno!',
-          suggestedDishType: 'Plato fresco y rápido'
-        }
-      },
-      matiGreeting: `¡Uf, qué calor con ${temp}°C! Ni se te ocurra prender el horno. Hoy vamos con algo fresco de heladera que se hace en un abrir y cerrar de ojos.`,
+      weather: weatherObj,
+      matiGreeting: `¡Uf, qué calor con ${temp}°C en ${city}! Ni se te ocurra prender el horno. Hoy vamos con algo fresco de heladera que se hace en un abrir y cerrar de ojos.`,
       featuredRecipe: {
         id: 'bowl-garbanzos-demo',
         title: 'Bowl Fresco de Garbanzos, Palta y Tomate',
@@ -297,17 +320,8 @@ function getOfflineFallback(temp: number): DailyFeedResponse {
     };
   } else {
     return {
-      weather: {
-        city: 'Buenos Aires',
-        temperature: temp,
-        condition: 'Agradable y templado',
-        culinaryProfile: {
-          category: 'templado',
-          sensationText: 'Clima ideal',
-          suggestedDishType: 'Clásicos caseros'
-        }
-      },
-      matiGreeting: `¡Hermoso día con ${temp}°C! Da gusto entrar a la cocina a preparar algo casero y rendidor.`,
+      weather: weatherObj,
+      matiGreeting: `¡Hermoso día con ${temp}°C en ${city}! Da gusto entrar a la cocina a preparar algo casero y rendidor.`,
       featuredRecipe: {
         id: 'tarta-zapallitos-demo',
         title: 'Tarta Dorada de Zapallitos y Queso',
@@ -343,81 +357,84 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.colors.background,
   },
   scrollContent: {
-    paddingHorizontal: THEME.spacing.md,
-    paddingTop: THEME.spacing.sm,
-    paddingBottom: THEME.spacing.xl * 2,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 90,
+    alignItems: 'stretch',
   },
   header: {
-    marginBottom: THEME.spacing.sm,
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 20,
   },
-  headerTop: {
-    flexDirection: 'row',
+  logoCenterContainer: {
     alignItems: 'center',
-    marginBottom: 6,
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  brandBadge: {
-    backgroundColor: '#FFEADF',
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 12,
-    borderWidth: 1,
+  brandSeal: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1.5,
     borderColor: '#F8C8B1',
+    backgroundColor: '#FFEADF',
   },
-  brandBadgeText: {
-    color: THEME.colors.primary,
-    fontWeight: '800',
-    fontSize: 12,
-    letterSpacing: 0.8,
+  titleContainer: {
+    width: '100%',
+    alignSelf: 'stretch',
+    paddingVertical: 6,
   },
   mainTitle: {
-    fontSize: THEME.typography.sizes.hero,
+    fontSize: 32,
     fontWeight: '900',
     color: THEME.colors.textPrimary,
     letterSpacing: -0.5,
+    lineHeight: 38,
   },
   subtitle: {
-    fontSize: THEME.typography.sizes.body,
+    fontSize: 16,
     color: THEME.colors.textSecondary,
-    marginTop: 4,
-    fontWeight: '500',
+    marginTop: 6,
+    fontWeight: '400',
+    lineHeight: 22,
   },
-  tempSelectorSection: {
-    backgroundColor: THEME.colors.cardBackground,
-    padding: THEME.spacing.sm,
-    borderRadius: 16,
-    marginVertical: THEME.spacing.xs,
-    borderWidth: 1,
-    borderColor: THEME.colors.border,
-  },
-  sectionMiniTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: THEME.colors.textSecondary,
-    marginBottom: 8,
-    letterSpacing: 0.5,
-  },
-  tempButtonsRow: {
+  locationPillContainer: {
+    width: '100%',
+    alignSelf: 'stretch',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  tempChip: {
-    flex: 1,
-    paddingVertical: 10,
-    marginHorizontal: 3,
-    borderRadius: 12,
-    backgroundColor: THEME.colors.background,
     alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: THEME.colors.border,
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#EDE7DE',
+    shadowColor: THEME.colors.shadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
-  tempChipActive: {
-    backgroundColor: '#FFE9DF',
-    borderColor: THEME.colors.primary,
+  locationText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: THEME.colors.textSecondary,
+    flex: 1,
+    marginRight: 8,
   },
-  tempChipText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: THEME.colors.textPrimary,
+  refreshIconButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F7F3EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  refreshIconText: {
+    fontSize: 12,
   },
   loadingContainer: {
     paddingVertical: THEME.spacing.xl * 2,
@@ -431,21 +448,42 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: THEME.spacing.lg,
   },
+  weatherBannerContainer: {
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 24,
+  },
   sectionHeader: {
-    marginTop: THEME.spacing.md,
-    marginBottom: THEME.spacing.xs,
+    width: '100%',
+    alignSelf: 'stretch',
+    marginTop: 4,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: THEME.typography.sizes.h2,
+    fontSize: 22,
     fontWeight: '800',
     color: THEME.colors.textPrimary,
+    letterSpacing: -0.3,
   },
   sectionHint: {
-    fontSize: THEME.typography.sizes.caption,
+    fontSize: 14,
     color: THEME.colors.textSecondary,
     marginTop: 2,
   },
+  alternativeSection: {
+    width: '100%',
+    alignSelf: 'stretch',
+    marginTop: 20,
+  },
+  alternativeSectionHeader: {
+    width: '100%',
+    alignSelf: 'stretch',
+    marginBottom: 12,
+  },
   refreshBox: {
-    marginTop: THEME.spacing.lg,
+    width: '100%',
+    alignSelf: 'stretch',
+    marginTop: 16,
+    marginBottom: 24,
   }
 });

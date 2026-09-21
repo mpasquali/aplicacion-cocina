@@ -53,6 +53,32 @@ app.post('/ai/recommend', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Endpoint de Chat Interactivo con Mati Bot
+ * POST /ai/chat
+ * Body: { messages: [{ role: 'user' | 'assistant', content: string }], context?: { temperature?: number, condition?: string, city?: string } }
+ */
+app.post('/ai/chat', async (req: Request, res: Response) => {
+  try {
+    const { messages, context } = req.body;
+
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({
+        error: 'El campo "messages" es obligatorio y debe ser un arreglo no vacío de mensajes.'
+      });
+    }
+
+    const chatResponse = await aiService.chatWithMati({ messages, context });
+    return res.json(chatResponse);
+  } catch (error) {
+    console.error('Error en endpoint de chat con Mati:', error);
+    return res.status(500).json({
+      error: 'Hubo un inconveniente al charlar con Mati.',
+      detail: (error as Error).message
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🤖 AI Recipe Service (Mati entre ollas) escuchando en puerto ${PORT}`);
 });
